@@ -49,90 +49,161 @@ disp(ganzes_kosten);
 disp("Leistungsabgabe (kW) von jeder Kraftwerkspark pro Stunde:");
 disp(solAP1.P_kt);
 
-%% AP2a
+% AP2a
+clear
+KEP_Data_Vorlage
+%Erstellen des Optimerungsproblem-Objekts
 
-clear;
-KEP_Data_Vorlage;  % Sicherstellen, dass die Daten geladen sind
-
-% Parameter
 nPP = size(kwData, 1);
-nT = T;
-UB_P = kwData(:, 5);
+nT= T;
+UB_P = kwData(:,5);
 UB_P = repmat(UB_P, 1, nT); 
-c_var = repmat(kwData(:, 6), 1, nT);
-Pmin = repmat(kwData(:, 4), 1, nT);
-c_fix = repmat(kwData(:, 7), 1, nT);
-c_anf = repmat(kwData(:, 8), 1, nT);
-DT = repmat(kwData(:, 9), 1, nT);
-BvO = kwData(:, 3);
+c_var = repmat(kwData(:,6), 1, nT);
+Pmin = repmat(kwData(:,4), 1, nT);
+c_fix = repmat(kwData(:,7), 1, nT);
+c_anf = repmat(kwData(:,8), 1, nT);
+DT = repmat(kwData(:,9), 1, nT);
+UT = repmat(kwData(:,10), 1, nT);
+A = repmat(kwData(:,11), 1, nT);
+rf_min = repmat(kwData(:,12), 1, nT);
+rf_max = repmat(kwData(:,13), 1, nT);
 
-% Optimierungsproblem erstellen
-probAP2a = optimproblem("Description", "minimize cost", "ObjectiveSense", "min"); 
+RU_RD = kwData(:,14);
+SU_SD = kwData(:,15);
+P_t = kwData(:,16);
+SnO = kwData(:,20);
 
-% Variablen erstellen
-P_kt = optimvar("P_kt", nPP, nT, "LowerBound", 0, "UpperBound", UB_P, "Type", "continuous"); 
-Betrieb_kt = optimvar("Betrieb_kt", nPP, nT, "LowerBound", 0, "UpperBound", 1, "Type", "integer");
-Son_kt = optimvar("Son_kt", nPP, nT, "LowerBound", 0, "UpperBound", 1, "Type", "integer");
-Soff_kt = optimvar("Soff_kt", nPP, nT, "LowerBound", 0, "UpperBound", 1, "Type", "integer");
 
-% Zielfunktion definieren
+BvO = kwData(:,3);
+SvO = kwData(:,2);
+
+probAP2a = optimproblem("Description","minimize cost", "ObjectiveSense","min"); 
+P_kt = optimvar("P_kt", nPP, nT, ...
+                "LowerBound", 0, ...
+                "UpperBound", UB_P, ...
+                "Type", "continuous"); 
+Betrieb_kt = optimvar("Betrieb_kt", nPP, nT, ...
+                "LowerBound",0 , ...
+                "UpperBound",1 , ...
+                "Type", "integer");
+Son_kt = optimvar("Son_kt", nPP, nT, ...
+                "LowerBound",0 , ...
+                "UpperBound",1 , ...
+                "Type", "integer");
+Soff_kt = optimvar("Soff_kt", nPP, nT, ...
+                "LowerBound",0 , ...
+                "UpperBound",1 , ...
+                "Type", "integer");
 probAP2a.Objective = sum(sum(c_var .* P_kt + c_fix .* Betrieb_kt + c_anf .* Son_kt));
-
-% Nachfragebedingungen
-probAP2a.Constraints.demand = optimconstr(nT, 1);
+probAP2a.Constraints.demand = optimconstr(nT,1);
 for l = 1:nT
-    probAP2a.Constraints.demand(l) = sum(P_kt(:, l)) == Power_Demand(l);
+     probAP2a.Constraints.demand(l) = sum(P_kt(:,l)) == Power_Demand(l);
 end
-
-% Leistungs-Min-Bedingung
 probAP2a.Constraints.leistungs_min = optimconstr(nPP, nT);
 for i = 1:nPP
     for j = 1:nT
-        probAP2a.Constraints.leistungs_min(i, j) = P_kt(i, j) >= Pmin(i, j) .* Betrieb_kt(i, j);
+        probAP2a.Constraints.leistungs_min(i,j) = P_kt(i,j) >= Pmin(i,j) .* Betrieb_kt(i,j);
     end
 end
 
-% Leistungs-Max-Bedingung
 probAP2a.Constraints.leistungs_max = optimconstr(nPP, nT);
 for i = 1:nPP
     for j = 1:nT
-        probAP2a.Constraints.leistungs_max(i, j) = P_kt(i, j) <= UB_P(i, j) .* Betrieb_kt(i, j);
+        probAP2a.Constraints.leistungs_max(i,j) = P_kt(i,j) <= UB_P(i,j) .* Betrieb_kt(i,j);
     end
 end
 
-% Start/Stop-Bedingung
 probAP2a.Constraints.startup_shutdown = optimconstr(nPP, nT);
 for j = 1:nPP
     for t = 1:nT
         if t == 1
-            v_prev = double(BvO(j) > 0);  % Zustand von t=1 (Betrieb 1 oder 0)
+           v_prev = double(BvO(j) > 0);  
         else
-            v_prev = Betrieb_kt(j, t-1);
+            v_prev = Betrieb_kt(j,t-1);
         end
-        probAP2a.Constraints.startup_shutdown(j, t) = Betrieb_kt(j, t) - v_prev == Son_kt(j, t) - Soff_kt(j, t);
+        probAP2a.Constraints.startup_shutdown(j,t) = Betrieb_kt(j,t) - v_prev == Son_kt(j,t) - Soff_kt(j,t);
     end
 end
 
-% Keine doppelten Start-Stop-Vorgänge
-probAP2a.Constraints.no_double_switch = optimconstr(nPP, nT);
-for j = 1:nPP
-    for t = 1:nT
-        probAP2a.Constraints.no_double_switch(j, t) = Son_kt(j, t) + Soff_kt(j, t) <= 1;
-    end
-end
 
-% Downtime-Bedingung
 probAP2a.Constraints.downtime = optimconstr(nPP, nT);
 for j = 1:nPP
-    for t = 1:nT
-        if t > 1  % sicherstellen, dass t-1 nicht 0 wird
-            probAP2a.Constraints.downtime(j, t) = sum(1 - Betrieb_kt(j, max(1, t - DT(j) + 1):t-1)) + Son_kt(j, t) <= DT(j);
+    for t = 2:nT
+        if DT(j) > 0 && t > DT(j)
+            probAP2a.Constraints.downtime(j,t) = sum(Betrieb_kt(j, t - DT(j):t - 1)) <= (1 - Son_kt(j,t)) * DT(j);
         end
     end
 end
 
-% Lösung des Optimierungsproblems
-solAP2a = probAP2a.solve("Solver", "intlinprog");
+%ap2b 
+probAP2a.Constraints.uptime = optimconstr(nPP, nT);
+for j = 1:nPP
+    for t = 1:nT - 1
+        if UT(j) > 0 && t + UT(j) - 1 <= nT
+            probAP2a.Constraints.uptime(j,t) = sum(1 - Betrieb_kt(j, t + 1 : t + UT(j) - 1)) <= (1 - Son_kt(j,t)) * UT(j);
+        end
+    end
+end
+
+%ap3
+probAP2a.Constraints.max_startups = optimconstr(nPP,1);
+for j = 1:nPP
+    probAP2a.Constraints.max_startups(j) = sum(Son_kt(j,:)) <= A(j,1);
+end
+
+probAP2a.Constraints.min_operating = optimconstr(nPP,1);
+for j = 1:nPP
+    probAP2a.Constraints.min_operating(j) = sum(Betrieb_kt(j,:)) >= rf_min(j,1);
+end
+
+probAP2a.Constraints.max_operating = optimconstr(nPP,1);
+for j = 1:nPP
+    probAP2a.Constraints.max_operating(j) = sum(Betrieb_kt(j,:)) <= rf_max(j,1);
+end
+
+%ap4
+
+
+probAP2a.Constraints.ramping_up = optimconstr(nPP, nT);
+for j = 1:nPP
+    for t = 1:nT
+        if t==1
+            Svor = SvO(j);
+            Pvor = P_t(j);
+        else
+            Svor = Betrieb_kt(j, t-1);
+            Pvor = P_kt(j, t-1);
+        end
+
+        probAP2a.Constraints.ramping_up(j,t) = -UB_P(j,t)<=-P_kt(j,t)+Pvor+(SU_SD(j)-UB_P(j,t))*Betrieb_kt(j,t)+(RU_RD(j)-SU_SD(j))*Svor;
+    end
+end
+
+probAP2a.Constraints.ramping_down = optimconstr(nPP, nT);
+for j = 1:nPP
+    for t = 1:nT
+        if t==1
+            Svor = SvO(j);
+            Pvor = P_t(j);
+        else
+            Svor = Betrieb_kt(j, t-1);
+            Pvor = P_kt(j, t-1);
+        end
+
+        probAP2a.Constraints.ramping_down(j,t) = 0<=UB_P(j,t)+P_kt(j,t)-Pvor+(SU_SD(j)-UB_P(j,t))*Svor+(RU_RD(j)-SU_SD(j))*Betrieb_kt(j,t);
+    end
+end
+
+probAP2a.Constraints.shutting_down = optimconstr(nPP, nT-1);
+for j = 1:nPP
+    for t = 1:nT-1
+        probAP2a.Constraints.shutting_down(j,t) = P_kt(j,t)<=SU_SD(j)*Betrieb_kt(j,t)+(UB_P(j,t)-SU_SD(j))*Betrieb_kt(j, t+1);
+    end
+end
+
+% Aufgabe Lösen 
+solAP2a = probAP2a.solve("Solver","intlinprog");
+
 
 % Wenn keine Lösung gefunden wird, eine Fehlermeldung ausgeben
 if isempty(solAP2a.P_kt) || any(isnan(solAP2a.P_kt), 'all')
