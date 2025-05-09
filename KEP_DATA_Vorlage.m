@@ -54,6 +54,7 @@ KwDataHeader = struct("Nr", 1, "SvO", 2,  "BvO", 3, "Pmin", 4, "Pmax", 5, ...
     "c_suc", 17, "c_s", 18, "CT", 19, "SnO", 20 );
 
 %Kraftwerksdaten
+%für aufgabe 3 muss man einfach zahlen in die tabelle einbißien ändern, um die unterschiede zu sehen und die analzse zu machen. aber mein code schon fertig
     kwData=[
 % 1     2   3   4       5       6       7       8       9   10  11  12      13      14      15      16      17      18      19      20        
 % Nr    SvO BvO Pmin    Pmax    c_var   c_fix   c_anf   DT  UT  A   rf_min  rf_max  RU_RD   SU_SD   P_t<0   c_suc   c_s     CT      SnO 
